@@ -1,0 +1,132 @@
+Reproducible Research
+======================
+
+1. Loading and preprocessing the data.
+----------------------
+Read data from activity.csv, with column class *Integer, Date and Integer*.
+
+```{r, echo=TRUE}
+data <- read.csv("activity.csv",
+                 colClass = c("integer", "Date", "integer"))
+summary(data)
+str(data)
+```
+2. What is mean total number of steps taken per day?
+----------------------
+
+First, lets add up number of steps taken each day.
+
+```{r, echo=TRUE}
+steps.each.day <- tapply(data$steps, data$date, sum, na.rm = TRUE)
+```
+
+Then, we load ggplot2 library and use qplot to draw a histgram with 30 bins.
+
+```{r, echo=TRUE}
+library(ggplot2)
+hist1 <- qplot(steps.each.day, binwidth = (max(steps.each.day) - min(steps.each.day)) / 30)
+print(hist1)
+```
+
+Finally, the mean and median is calculated as below.
+
+```{r, echo=TRUE}
+mean.steps <- mean(steps.each.day)
+median.steps <- median(steps.each.day)
+```
+
+We got: mean.steps = `r mean.steps`, and median = `r median.steps` 
+
+3. What is the avergae daily activity pattern?
+----------------------
+
+First we calculate mean steps each interval.
+
+```{r, echo=TRUE}
+mean.steps.per.interval <- tapply(data$steps, data$interval, mean, na.rm = TRUE)
+```
+Then we draw the line graph.
+
+```{r, echo=TRUE}
+interval = as.numeric(rownames(mean.steps.per.interval))
+qplot(interval, mean.steps.per.interval, geom = "line")
+```
+
+Finally, we find the maximum.
+
+```{r, echo=TRUE}
+index.max <- as.numeric(rownames(mean.steps.per.interval)[
+             which(mean.steps.per.interval == max(mean.steps.per.interval))])
+hour <- floor(index.max / 100)
+minute <- index.max - hour * 100
+```
+
+Interval `r index.max` contain the maximum number of steps.
+It is `r hour`:`r minute`
+
+4. Inputing missing values
+----------------------
+
+First we use package **mice** to look for missings.
+
+```{r, echo=TRUE}
+library(mice)
+md.pattern(data)
+num.missings <- sum(is.na(data$steps))
+```
+
+There are `r num.missings` missing steps in activity.csv.
+
+Then we fill the missings with mean of the same interval across all days.
+
+```{r, echo=TRUE}
+find.mean <- function(interval) {
+  mean.steps.per.interval[as.character(interval)]
+}
+complete.data <- data
+for (i in 1:nrow(complete.data)){
+  if(is.na(complete.data$steps[i])){
+    complete.data$steps[i] <- find.mean(complete.data$interval[i])
+  }
+}
+md.pattern(complete.data)
+```
+
+Histgram of the complete data is shown below.
+
+```{r, echo=TRUE}
+steps.each.day.complete <- tapply(complete.data$steps, complete.data$date, sum, na.rm = TRUE)
+hist2 <- qplot(steps.each.day.complete, binwidth = (max(steps.each.day.complete) - min(steps.each.day.complete)) / 30)
+print(hist1)
+print(hist2)
+mean.steps.complete <- mean(steps.each.day.complete)
+median.steps.complete <- median(steps.each.day.complete)
+```
+
+We got:   mean.steps = `r mean.steps.complete`, and median = `r median.steps.complete` 
+
+Original: mean.steps = `r mean.steps`, and median = `r median.steps` 
+
+By comparison, we found that as we replace missings with mean, daily activity is closer to a gaussian distribution. 
+
+
+5. Are there differences in activity patterns between weekdays and weekends:
+----------------------
+
+Here we use package **reshape** to group Original data by daytype.
+
+```{r, echo=TRUE}
+complete.data$daytype <- format(complete.data$date, "%u")
+complete.data$daytype <- complete.data$daytype > 5
+library(reshape2)
+week.data <- melt(complete.data, id = c("interval", "daytype", "date"),
+                  measure.vars = c("steps"))
+week.data <- dcast(week.data, interval + daytype ~ variable, mean) 
+week.data$daytype <- factor(as.integer(week.data$daytype), label = c("Weekday", "Weekend"))
+```
+
+The final graph shown here.
+
+```{r, echo=TRUE, fig.width=10}
+qplot(interval, steps, data = week.data, geom = "line", facets = daytype~.)
+```
